@@ -1,240 +1,161 @@
 <!DOCTYPE html>
-<html lang="th">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>LS1995 Scanner</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scanner</title>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@zxing/browser@latest"></script>
 
 <style>
-:root{
-  --primary:#00C853;
-  --bg:#0F1115;
-  --card:#1A1F27;
-  --text:#EAEAEA;
-  --muted:#8A94A6;
+body {
+  margin: 0;
+  background: black;
+  overflow: hidden;
 }
-
-*{box-sizing:border-box}
-
-body{
-  margin:0;
-  font-family:'Prompt',sans-serif;
-  background:var(--bg);
-  color:var(--text);
-  display:flex;
-  flex-direction:column;
-  height:100vh;
+video {
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
 }
-
-header{
-  padding:16px;
-  text-align:center;
-  background:var(--card);
-  font-weight:600;
-  font-size:18px;
-  letter-spacing:.5px;
-  border-bottom:1px solid #222;
+#overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70%;
+  height: 25%;
+  transform: translate(-50%, -50%);
+  border: 3px solid #00ff88;
+  box-sizing: border-box;
 }
-
-#video-container{
-  position:relative;
-  flex:1;
-  background:black;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-video{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-.scan-frame{
-  position:absolute;
-  width:85%;
-  height:90px;
-  border:2px solid rgba(255,255,255,0.9);
-  border-radius:12px;
-  box-shadow:0 0 0 9999px rgba(0,0,0,0.7);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.laser-line{
-  width:95%;
-  height:3px;
-  background:red;
-  box-shadow:0 0 10px red;
-  animation: pulse 1.2s infinite alternate;
-}
-
-@keyframes pulse{
-  from{opacity:.3}
-  to{opacity:1}
-}
-
-.controls{
-  background:var(--card);
-  padding:18px;
-  border-top:1px solid #222;
-  text-align:center;
-}
-
-#status{
-  font-size:15px;
-  margin-bottom:12px;
-  color:var(--muted);
-  font-weight:500;
-}
-
-.status-ready{color:var(--primary)}
-.status-success{color:#4CAF50}
-.status-error{color:#FF5252}
-
-button{
-  padding:12px 28px;
-  border-radius:50px;
-  border:none;
-  background:var(--primary);
-  color:#000;
-  font-weight:600;
-  font-size:15px;
-  cursor:pointer;
-  transition:.2s;
-}
-button:active{transform:scale(.95)}
 </style>
 </head>
 <body>
 
-<header>LS1995 BARCODE SCANNER</header>
-
-<div id="video-container">
-  <div class="scan-frame">
-    <div class="laser-line"></div>
-  </div>
-  <video id="video" autoplay muted playsinline></video>
-</div>
-
-<div class="controls">
-  <div id="status">Initializing...</div>
-  <button id="switchBtn" style="display:none;">Switch Camera</button>
-</div>
+<video id="video" autoplay playsinline></video>
+<div id="overlay"></div>
+<input type="text" id="keyboardInput" autofocus style="opacity:0;position:absolute;">
 
 <script>
-const LIFF_ID = "2008549095-zkEgKWNd";
 
+const LIFF_ID = "2008552223-7BjGxV6G";
 let codeReader;
-let selectedDeviceId;
-let devices=[];
-let isScanning=false;
+let scanLock = false;
 
-function setStatus(text,type){
-  const el=document.getElementById("status");
-  el.innerText=text;
-  el.className="";
-  if(type) el.classList.add(type);
+// ---------- Warmup (แก้ LINE WebView กล้องดำ) ----------
+async function warmUpCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach(t => t.stop());
+  } catch (e) {}
 }
 
-async function init(){
-  try{
-    await liff.init({liffId:LIFF_ID});
-    startScanner();
-  }catch(e){
-    setStatus("LIFF Error","status-error");
-  }
-}
-
-async function startScanner(){
-  const hints=new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.CODE_128
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-
-  codeReader=new ZXing.BrowserBarcodeReader(hints);
-  codeReader.timeBetweenScansMillis=150;
-
-  try{
-    devices=await codeReader.listVideoInputDevices();
-    if(!devices.length){
-      setStatus("No Camera Found","status-error");
-      return;
+// ---------- เลือกกล้องหลังปกติ ----------
+function selectBackCamera(devices) {
+  for (const device of devices) {
+    const label = device.label.toLowerCase();
+    if (
+      (label.includes("back") || label.includes("rear")) &&
+      !label.includes("wide") &&
+      !label.includes("ultra") &&
+      !label.includes("macro")
+    ) {
+      return device.deviceId;
     }
-
-    selectedDeviceId=devices[0].deviceId;
-    if(devices.length>1){
-      document.getElementById("switchBtn").style.display="inline-block";
-    }
-
-    decode(selectedDeviceId);
-
-  }catch(e){
-    setStatus("Camera Access Denied","status-error");
   }
+  return devices[0]?.deviceId;
 }
 
-function decode(deviceId){
-  codeReader.reset();
-  isScanning=true;
-  setStatus("Ready to Scan","status-ready");
+// ---------- ยิงแล้วส่ง ----------
+async function sendResult(text) {
+  if (scanLock) return;
+  scanLock = true;
 
-  codeReader.decodeFromVideoDevice(deviceId,"video",(result,err)=>{
-    if(result && isScanning){
-      isScanning=false;
-      playBeep();
-      setStatus("Scanned: "+result.text,"status-success");
-      send(result.text);
-      codeReader.reset();
+  // beep
+  const audio = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAACJWAAACABAAZGF0YQAAAAA=");
+  audio.play().catch(()=>{});
+
+  // vibration
+  if (navigator.vibrate) navigator.vibrate(150);
+
+  try {
+    await liff.sendMessages([
+      { type: "text", text: text }
+    ]);
+  } catch (e) {}
+
+  setTimeout(() => {
+    liff.closeWindow();
+  }, 200);
+}
+
+// ---------- กล้องสแกน ----------
+async function startCameraScanner() {
+  codeReader = new ZXing.BrowserMultiFormatReader();
+
+  const devices = await codeReader.listVideoInputDevices();
+  const selectedId = selectBackCamera(devices);
+
+  codeReader.decodeFromVideoDevice(
+    selectedId,
+    "video",
+    (result, err) => {
+      if (result) {
+        sendResult(result.getText());
+      }
+    }
+  );
+
+  // force continuous focus
+  setTimeout(async () => {
+    const video = document.querySelector("video");
+    const stream = video.srcObject;
+    if (!stream) return;
+
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities();
+    const adv = {};
+
+    if (caps.focusMode) adv.focusMode = "continuous";
+    if (caps.exposureMode) adv.exposureMode = "continuous";
+
+    if (Object.keys(adv).length > 0) {
+      await track.applyConstraints({ advanced: [adv] });
+    }
+  }, 500);
+}
+
+// ---------- รองรับ Bluetooth Scanner ----------
+function setupKeyboardScanner() {
+  const input = document.getElementById("keyboardInput");
+  input.focus();
+
+  let buffer = "";
+
+  input.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      if (buffer.length > 5) {
+        sendResult(buffer);
+      }
+      buffer = "";
+    } else {
+      buffer += e.key;
     }
   });
 }
 
-document.getElementById("switchBtn").onclick=()=>{
-  const index=devices.findIndex(d=>d.deviceId===selectedDeviceId);
-  selectedDeviceId=devices[(index+1)%devices.length].deviceId;
-  decode(selectedDeviceId);
-};
+// ---------- Init ----------
+async function init() {
+  await liff.init({ liffId: LIFF_ID });
 
-async function send(text){
-  if(!liff.isInClient()){
-    alert("TEST MODE: "+text);
-    setTimeout(()=>decode(selectedDeviceId),1200);
-    return;
-  }
-
-  try{
-    await liff.sendMessages([{type:"text",text}]);
-    liff.closeWindow();
-  }catch(e){
-    setStatus("Send Failed","status-error");
-    decode(selectedDeviceId);
-  }
-}
-
-function playBeep(){
-  const ctx=new (window.AudioContext||window.webkitAudioContext)();
-  const osc=ctx.createOscillator();
-  const gain=ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.frequency.value=1800;
-  gain.gain.value=.08;
-  osc.start();
-  setTimeout(()=>osc.stop(),100);
+  await warmUpCamera();
+  await startCameraScanner();
+  setupKeyboardScanner();
 }
 
 init();
-</script>
 
+</script>
 </body>
 </html>
