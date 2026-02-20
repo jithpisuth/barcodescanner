@@ -1,260 +1,182 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scanner - Leamchabang</title>
-  
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner - Leamchabang</title>
 
-  <style>
-    /* พื้นฐาน */
-    body { 
-        font-family: 'Sarabun', sans-serif; 
-        background-color: #000; 
-        margin: 0; 
-        display: flex; 
-        flex-direction: column; 
-        height: 100vh; 
-        overflow: hidden;
-    }
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 
-    header {
-        background: #1A374D;
-        color: white;
-        padding: 15px;
-        text-align: center;
-        z-index: 20;
-    }
-    h3 { margin: 0; font-size: 18px; font-weight: 500; }
+<style>
+body {
+  font-family: sans-serif;
+  background: #000;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
 
-    /* พื้นที่แสดงผลกล้อง */
-    #video-container {
-        position: relative;
-        flex-grow: 1;
-        background: #000;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    video { 
-        width: 100%; 
-        height: 100%; 
-        object-fit: cover; 
-    }
+header {
+  background: #1A374D;
+  color: white;
+  padding: 15px;
+  text-align: center;
+}
 
-    /* --- ปรับปรุงกรอบสแกน (Focus Area) --- */
-    .scan-frame {
-        position: absolute;
-        width: 85%;         /* กว้างเกือบเต็มจอ */
-        height: 80px;       /* ***แคบลงมาก*** (เหมือนไม้บรรทัด) เพื่อบังคับให้เล็งกลางปากกา */
-        border: 2px solid rgba(255, 255, 255, 0.9);
-        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7); /* ฉากหลังมืดลงให้เห็นกรอบชัดๆ */
-        border-radius: 10px;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none; /* ให้แตะทะลุไปโฟกัสได้ */
-    }
-    
-    /* เส้นเลเซอร์สีแดง เข้มและชัดขึ้น */
-    .laser-line {
-        width: 95%;
-        height: 3px; /* หนาขึ้น */
-        background: #ff0000;
-        box-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
-        opacity: 0.9;
-    }
+#video-container {
+  position: relative;
+  flex: 1;
+}
 
-    /* ข้อความแนะนำตรงกลางจอ */
-    .guide-text {
-        position: absolute;
-        top: -30px;
-        width: 100%;
-        text-align: center;
-        color: white;
-        font-size: 14px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    }
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
-    /* แผงควบคุมด้านล่าง */
-    .controls {
-        background: #fff;
-        padding: 20px;
-        border-radius: 20px 20px 0 0;
-        text-align: center;
-        z-index: 20;
-        min-height: 100px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-    
-    #status { 
-        color: #333; 
-        margin: 0 0 10px 0; 
-        font-size: 16px; 
-        font-weight: 600;
-    }
+.scan-frame {
+  position: absolute;
+  width: 85%;
+  height: 80px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.7);
+  border-radius: 10px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
 
-    button {
-        padding: 12px 30px;
-        border-radius: 50px;
-        border: none;
-        background: #1A374D;
-        color: #fff;
-        font-family: 'Sarabun', sans-serif;
-        font-size: 16px;
-        cursor: pointer;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        transition: all 0.2s;
-    }
-    button:active { transform: scale(0.95); }
-  </style>
+.controls {
+  background: #fff;
+  padding: 15px;
+  text-align: center;
+}
+
+#status {
+  font-weight: bold;
+}
+</style>
 </head>
 <body>
 
-  <header>
-    <h3>สแกนสินค้า</h3>
-  </header>
+<header>
+  <h3>สแกนสินค้า</h3>
+</header>
 
-  <div id="video-container">
-    <div class="scan-frame">
-        <div class="guide-text">เล็งเส้นแดงให้ทับกลางบาร์โค้ด</div>
-        <div class="laser-line"></div>
-    </div>
-    <video id="video" autoplay muted playsinline></video>
-  </div>
+<div id="video-container">
+  <div class="scan-frame"></div>
+  <video id="video" autoplay muted playsinline></video>
+</div>
 
-  <div class="controls">
-    <p id="status">กำลังเปิดกล้อง...</p>
-  </div>
+<div class="controls">
+  <p id="status">กำลังเปิดกล้อง...</p>
+</div>
 
-  <script>
-    const LIFF_ID = "2008552223-7BjGxV6G"; 
-    let codeReader;
-    let selectedDeviceId;
-    let videoInputDevices = [];
-    let isScanning = false; 
+<script>
 
-    async function initLIFF() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        startScanner();
-      } catch (err) {
-        document.getElementById('status').innerText = "LIFF Error: " + err;
-      }
-    }
+const LIFF_ID = "2008552223-7BjGxV6G";
+let codeReader;
+let isScanning = false;
 
-    async function startScanner() {
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.CODE_128, 
-        ZXing.BarcodeFormat.EAN_8
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-      codeReader = new ZXing.BrowserBarcodeReader(hints);
-      codeReader.timeBetweenScansMillis = 200; 
-
-      try {
-        videoInputDevices = await codeReader.listVideoInputDevices();
-        if (videoInputDevices.length == 0) {
-            document.getElementById('status').innerText = "ไม่พบกล้อง";
-            return;
-        }
-
-        selectedDeviceId = selectMainCamera(videoInputDevices);
-        startDecoding(selectedDeviceId);
-
-        if (videoInputDevices.length > 1) {
-            document.getElementById('switchBtn').style.display = 'inline-block';
-        }
-      } catch (err) {
-        document.getElementById('status').innerText = "เข้าถึงกล้องไม่ได้";
-      }
-    }
-
-    function selectMainCamera(devices) {
-    for (const device of devices) {
-        const label = device.label.toLowerCase();
-
-        if (
-            label.includes('back') ||
-            label.includes('rear') ||
-            label.includes('environment')
-        ) {
-            return device.deviceId;
-        }
-    }
-
-    // ถ้าไม่เจอเลย
-    return null;
+// 🔥 บังคับขอ permission ก่อน
+async function requestCameraPermission() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }
+    });
+    stream.getTracks().forEach(track => track.stop());
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
 
-    function startDecoding(deviceId) {
+async function initLIFF() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+
+    const allowed = await requestCameraPermission();
+
+    if (!allowed) {
+      document.getElementById('status').innerText = "กรุณาอนุญาตใช้กล้อง";
+      return;
+    }
+
+    startScanner();
+
+  } catch (err) {
+    document.getElementById('status').innerText = "LIFF Error";
+  }
+}
+
+function startScanner() {
+
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.EAN_8
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+  codeReader = new ZXing.BrowserBarcodeReader(hints);
+  isScanning = true;
+
+  codeReader.decodeFromConstraints(
+    {
+      video: {
+        facingMode: { exact: "environment" }
+      }
+    },
+    'video',
+    (result, err) => {
+
+      if (result && isScanning) {
+        isScanning = false;
+        playSound();
+        sendMessage(result.text);
         codeReader.reset();
-        document.getElementById('status').innerText = "พร้อมสแกน";
-        document.getElementById('status').style.color = "#333";
-        isScanning = true;
-
-        codeReader.decodeFromVideoDevice(deviceId, 'video', (result, err) => {
-            if (result && isScanning) {
-                isScanning = false;
-                playSound();
-                document.getElementById('status').innerText = "✅ อ่านรหัส: " + result.text;
-                document.getElementById('status').style.color = "#28a745";
-                sendMessage(result.text);
-                codeReader.reset();
-            }
-        });
-    }
-
-    document.getElementById('switchBtn').addEventListener('click', () => {
-        const currentIndex = videoInputDevices.findIndex(d => d.deviceId === selectedDeviceId);
-        const nextIndex = (currentIndex + 1) % videoInputDevices.length;
-        selectedDeviceId = videoInputDevices[nextIndex].deviceId;
-        startDecoding(selectedDeviceId);
-    });
-
-    async function sendMessage(text) {
-      const msg = text; 
-
-      if (!liff.isInClient()) {
-        alert("Test Mode: " + msg);
-        setTimeout(() => startDecoding(selectedDeviceId), 1000);
-        return;
-      }
-
-      try {
-        await liff.sendMessages([{ type: 'text', text: msg }]);
-        liff.closeWindow();
-      } catch (err) {
-        alert('ส่งไม่สำเร็จ: ' + err);
-        startDecoding(selectedDeviceId);
       }
     }
+  );
 
-    function playSound() {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.connect(g);
-        g.connect(ctx.destination);
-        osc.frequency.value = 1500; 
-        g.gain.value = 0.1;
-        osc.start();
-        setTimeout(() => osc.stop(), 100);
-    }
+  document.getElementById('status').innerText = "พร้อมสแกน";
+}
 
-    initLIFF();
-  </script>
+async function sendMessage(text) {
+
+  if (!liff.isInClient()) {
+    alert(text);
+    return;
+  }
+
+  try {
+    await liff.sendMessages([
+      { type: 'text', text: text }
+    ]);
+    liff.closeWindow();
+  } catch (err) {
+    document.getElementById('status').innerText = "ส่งไม่สำเร็จ";
+  }
+}
+
+function playSound() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = 1500;
+  gain.gain.value = 0.1;
+  osc.start();
+  setTimeout(() => osc.stop(), 100);
+}
+
+initLIFF();
+
+</script>
 </body>
 </html>
