@@ -3,223 +3,238 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Scanner PRO - LS1995</title>
-
-<style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    background: #111;
-    color: #fff;
-    font-family: sans-serif;
-    text-align: center;
-  }
-
-  body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 15px;
-  }
-
-  h3 { margin-top: 10px; color: #06C755; }
-
-  #videoContainer {
-    width: 100%;
-    max-width: 420px;
-    aspect-ratio: 1/1;
-    background: black;
-    border-radius: 12px;
-    overflow: hidden;
-    position: relative;
-    border: 2px solid #333;
-  }
-
-  video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .overlay {
-    position: absolute;
-    inset: 0;
-    border: 3px solid #06C755;
-    box-sizing: border-box;
-    pointer-events: none;
-  }
-
-  button {
-    padding: 15px;
-    font-size: 16px;
-    font-weight: bold;
-    border-radius: 8px;
-    border: none;
-    background: #06C755;
-    color: white;
-    cursor: pointer;
-    width: 100%;
-    max-width: 420px;
-    margin-top: 10px;
-  }
-
-  input {
-    padding: 15px;
-    border-radius: 8px;
-    width: 100%;
-    max-width: 420px;
-    margin-top: 10px;
-    font-size: 16px;
-    border: 1px solid #555;
-    text-align: center;
-  }
-
-  #status {
-    font-size: 14px;
-    color: #aaa;
-    margin-top: 10px;
-  }
-
-</style>
-</head>
-
-<body>
-
-<h3>🔍 Scanner PRO</h3>
-<div id="videoContainer">
-  <video id="video" autoplay playsinline></video>
-  <div class="overlay"></div>
-</div>
-
-<p id="status">กำลังเปิดกล้อง...</p>
-
-<button onclick="toggleFlash()">เปิด/ปิด ไฟแฟลช</button>
-
-<input type="text" id="manualInput" placeholder="พิมพ์รหัสเอง">
-<button onclick="sendManual()">ส่งรหัส</button>
+<title>LS1995 Scanner</title>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script type="module">
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
 
-import { BrowserMultiFormatReader } from 
-'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.1/+esm';
-
-const LIFF_ID = "2008552223-7BjGxV6G";
-
-let codeReader = new BrowserMultiFormatReader({
-  delayBetweenScanAttempts: 50,
-  delayBetweenScanSuccess: 500
-});
-
-let currentStream;
-let videoTrack;
-let flashOn = false;
-
-async function initLIFF() {
-  await liff.init({ liffId: LIFF_ID });
-  await liff.ready;
-  startCamera();
+<style>
+:root{
+  --primary:#00C853;
+  --bg:#0F1115;
+  --card:#1A1F27;
+  --text:#EAEAEA;
+  --muted:#8A94A6;
 }
 
-async function startCamera() {
-  try {
+*{box-sizing:border-box}
 
-    // 1️⃣ ขอสิทธิ์แบบเรียบ ๆ ก่อน
-    currentStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
-      audio: false
-    });
+body{
+  margin:0;
+  font-family:'Prompt',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
 
-    const video = document.getElementById("video");
-    video.srcObject = currentStream;
-    video.setAttribute("playsinline", true);
-    await video.play();
+header{
+  padding:16px;
+  text-align:center;
+  background:var(--card);
+  font-weight:600;
+  font-size:18px;
+  letter-spacing:.5px;
+  border-bottom:1px solid #222;
+}
 
-    videoTrack = currentStream.getVideoTracks()[0];
+#video-container{
+  position:relative;
+  flex:1;
+  background:black;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 
-    // 2️⃣ ค่อยพยายามปรับโหมดขั้นสูง
-    const capabilities = videoTrack.getCapabilities();
+video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
 
-    const advancedConstraints = {};
+.scan-frame{
+  position:absolute;
+  width:85%;
+  height:90px;
+  border:2px solid rgba(255,255,255,0.9);
+  border-radius:12px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,0.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 
-    if (capabilities.focusMode) {
-      advancedConstraints.focusMode = "continuous";
-    }
+.laser-line{
+  width:95%;
+  height:3px;
+  background:red;
+  box-shadow:0 0 10px red;
+  animation: pulse 1.2s infinite alternate;
+}
 
-    if (capabilities.exposureMode) {
-      advancedConstraints.exposureMode = "continuous";
-    }
+@keyframes pulse{
+  from{opacity:.3}
+  to{opacity:1}
+}
 
-    if (Object.keys(advancedConstraints).length > 0) {
-      await videoTrack.applyConstraints({
-        advanced: [advancedConstraints]
-      });
-    }
+.controls{
+  background:var(--card);
+  padding:18px;
+  border-top:1px solid #222;
+  text-align:center;
+}
 
-    document.getElementById("status").innerText =
-      "เล็งบาร์โค้ดให้เต็มกรอบ";
+#status{
+  font-size:15px;
+  margin-bottom:12px;
+  color:var(--muted);
+  font-weight:500;
+}
 
-    // 3️⃣ เริ่ม decode
-    codeReader.decodeFromVideoElement(video, (result, err) => {
-      if (result) {
-        stopCamera();
-        sendToChat(result.getText());
-      }
-    });
+.status-ready{color:var(--primary)}
+.status-success{color:#4CAF50}
+.status-error{color:#FF5252}
 
-  } catch (err) {
+button{
+  padding:12px 28px;
+  border-radius:50px;
+  border:none;
+  background:var(--primary);
+  color:#000;
+  font-weight:600;
+  font-size:15px;
+  cursor:pointer;
+  transition:.2s;
+}
+button:active{transform:scale(.95)}
+</style>
+</head>
+<body>
 
-    console.error(err);
+<header>LS1995 BARCODE SCANNER</header>
 
-    document.getElementById("status").innerText =
-      "เปิดกล้องไม่ได้ กรุณาอนุญาตสิทธิ์กล้อง";
+<div id="video-container">
+  <div class="scan-frame">
+    <div class="laser-line"></div>
+  </div>
+  <video id="video" autoplay muted playsinline></video>
+</div>
 
+<div class="controls">
+  <div id="status">Initializing...</div>
+  <button id="switchBtn" style="display:none;">Switch Camera</button>
+</div>
+
+<script>
+const LIFF_ID = "2008549095-zkEgKWNd";
+
+let codeReader;
+let selectedDeviceId;
+let devices=[];
+let isScanning=false;
+
+function setStatus(text,type){
+  const el=document.getElementById("status");
+  el.innerText=text;
+  el.className="";
+  if(type) el.classList.add(type);
+}
+
+async function init(){
+  try{
+    await liff.init({liffId:LIFF_ID});
+    startScanner();
+  }catch(e){
+    setStatus("LIFF Error","status-error");
   }
 }
 
-function toggleFlash() {
-  if (!videoTrack) return;
+async function startScanner(){
+  const hints=new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.CODE_128
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
 
-  const capabilities = videoTrack.getCapabilities();
-  if (!capabilities.torch) {
-    alert("อุปกรณ์นี้ไม่มีไฟแฟลช");
-    return;
+  codeReader=new ZXing.BrowserBarcodeReader(hints);
+  codeReader.timeBetweenScansMillis=150;
+
+  try{
+    devices=await codeReader.listVideoInputDevices();
+    if(!devices.length){
+      setStatus("No Camera Found","status-error");
+      return;
+    }
+
+    selectedDeviceId=devices[0].deviceId;
+    if(devices.length>1){
+      document.getElementById("switchBtn").style.display="inline-block";
+    }
+
+    decode(selectedDeviceId);
+
+  }catch(e){
+    setStatus("Camera Access Denied","status-error");
   }
+}
 
-  flashOn = !flashOn;
-  videoTrack.applyConstraints({
-    advanced: [{ torch: flashOn }]
+function decode(deviceId){
+  codeReader.reset();
+  isScanning=true;
+  setStatus("Ready to Scan","status-ready");
+
+  codeReader.decodeFromVideoDevice(deviceId,"video",(result,err)=>{
+    if(result && isScanning){
+      isScanning=false;
+      playBeep();
+      setStatus("Scanned: "+result.text,"status-success");
+      send(result.text);
+      codeReader.reset();
+    }
   });
 }
 
-function stopCamera() {
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
+document.getElementById("switchBtn").onclick=()=>{
+  const index=devices.findIndex(d=>d.deviceId===selectedDeviceId);
+  selectedDeviceId=devices[(index+1)%devices.length].deviceId;
+  decode(selectedDeviceId);
+};
+
+async function send(text){
+  if(!liff.isInClient()){
+    alert("TEST MODE: "+text);
+    setTimeout(()=>decode(selectedDeviceId),1200);
+    return;
+  }
+
+  try{
+    await liff.sendMessages([{type:"text",text}]);
+    liff.closeWindow();
+  }catch(e){
+    setStatus("Send Failed","status-error");
+    decode(selectedDeviceId);
   }
 }
 
-function sendManual() {
-  let val = document.getElementById('manualInput').value.trim();
-  if (val) sendToChat(val);
+function playBeep(){
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const osc=ctx.createOscillator();
+  const gain=ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value=1800;
+  gain.gain.value=.08;
+  osc.start();
+  setTimeout(()=>osc.stop(),100);
 }
 
-function sendToChat(text) {
-  document.getElementById("status").innerText = "กำลังส่งข้อมูล...";
-  if (liff.isInClient()) {
-    liff.sendMessages([{ type: 'text', text }])
-      .then(() => liff.closeWindow());
-  } else {
-    alert(text);
-  }
-}
-
-initLIFF();
-
+init();
 </script>
+
 </body>
 </html>
