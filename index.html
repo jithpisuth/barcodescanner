@@ -134,7 +134,6 @@
 
   <div class="controls">
     <p id="status">กำลังเปิดกล้อง...</p>
-    <button id="switchBtn" style="display:none;">สลับกล้อง</button>
   </div>
 
   <script>
@@ -184,15 +183,21 @@
     }
 
     function selectMainCamera(devices) {
-        for (const device of devices) {
-            const label = device.label.toLowerCase();
-            if ((label.includes('back') || label.includes('rear')) && 
-                !label.includes('wide') && !label.includes('ultra') && !label.includes('0.5')) {
-                return device.deviceId;
-            }
+    for (const device of devices) {
+        const label = device.label.toLowerCase();
+
+        if (
+            label.includes('back') ||
+            label.includes('rear') ||
+            label.includes('environment')
+        ) {
+            return device.deviceId;
         }
-        return devices[0].deviceId;
     }
+
+    // ถ้าไม่เจอเลย
+    return null;
+}
 
     function startDecoding(deviceId) {
         codeReader.reset();
