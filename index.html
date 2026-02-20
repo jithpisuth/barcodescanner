@@ -124,25 +124,47 @@ async function initLIFF() {
 
 async function startCamera() {
   try {
+
+    // 1️⃣ ขอสิทธิ์แบบเรียบ ๆ ก่อน
     currentStream = await navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: { exact: "environment" },
+        facingMode: "environment",
         width: { ideal: 1280 },
-        height: { ideal: 720 },
-        focusMode: "continuous",
-        advanced: [
-          { exposureMode: "continuous" },
-          { whiteBalanceMode: "continuous" }
-        ]
-      }
+        height: { ideal: 720 }
+      },
+      audio: false
     });
 
     const video = document.getElementById("video");
     video.srcObject = currentStream;
+    video.setAttribute("playsinline", true);
+    await video.play();
+
     videoTrack = currentStream.getVideoTracks()[0];
 
-    document.getElementById("status").innerText = "เล็งบาร์โค้ดให้เต็มกรอบ";
+    // 2️⃣ ค่อยพยายามปรับโหมดขั้นสูง
+    const capabilities = videoTrack.getCapabilities();
 
+    const advancedConstraints = {};
+
+    if (capabilities.focusMode) {
+      advancedConstraints.focusMode = "continuous";
+    }
+
+    if (capabilities.exposureMode) {
+      advancedConstraints.exposureMode = "continuous";
+    }
+
+    if (Object.keys(advancedConstraints).length > 0) {
+      await videoTrack.applyConstraints({
+        advanced: [advancedConstraints]
+      });
+    }
+
+    document.getElementById("status").innerText =
+      "เล็งบาร์โค้ดให้เต็มกรอบ";
+
+    // 3️⃣ เริ่ม decode
     codeReader.decodeFromVideoElement(video, (result, err) => {
       if (result) {
         stopCamera();
@@ -151,8 +173,12 @@ async function startCamera() {
     });
 
   } catch (err) {
+
+    console.error(err);
+
     document.getElementById("status").innerText =
-      "เปิดกล้องไม่ได้ กรุณาพิมพ์รหัสแทน";
+      "เปิดกล้องไม่ได้ กรุณาอนุญาตสิทธิ์กล้อง";
+
   }
 }
 
