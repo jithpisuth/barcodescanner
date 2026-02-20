@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Scanner 1D Pro</title>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #111;
+  color: #fff;
+  font-family: sans-serif;
+  text-align: center;
+}
+
+h3 { color: #06C755; margin: 12px 0; }
+
+#reader {
+  width: 100%;
+  max-width: 420px;
+  height: 260px;
+  margin: auto;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #333;
+}
+
+#status {
+  font-size: 14px;
+  color: #aaa;
+  margin: 10px 0;
+}
+
+input, button {
+  width: 95%;
+  max-width: 420px;
+  padding: 14px;
+  font-size: 16px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border: none;
+}
+
+button {
+  background: #06C755;
+  color: white;
+  font-weight: bold;
+}
+
+input {
+  border: 1px solid #555;
+  text-align: center;
+}
+</style>
+</head>
+
+<body>
+<h3>🔍 สแกนบาร์โค้ดสินค้า</h3>
+<div id="reader"></div>
+<div id="status">กำลังโหลด...</div>
+
+<input type="text" id="manualInput" placeholder="พิมพ์รหัสสินค้าเอง">
+<button onclick="sendManual()">ส่งรหัส</button>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<script>
+const LIFF_ID = "2008552223-7BjGxV6G";
+let scanner;
+
+async function init() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    await liff.ready;
+
+    document.body.style.minHeight = window.innerHeight + "px";
+    startScanner();
+
+  } catch (err) {
+    document.getElementById("status").innerText = "LIFF Error: " + err.message;
+  }
+}
+
+function startScanner() {
+  scanner = new Html5Qrcode("reader");
+
+  const config = {
+    fps: 20, // เร็วขึ้น
+    rememberLastUsedCamera: true,
+    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128
+    ],
+    videoConstraints: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    },
+    qrbox: function(viewfinderWidth, viewfinderHeight) {
+      return {
+        width: viewfinderWidth * 0.95,
+        height: 120 // แนวนอนยาว สำหรับ 1D
+      };
+    }
+  };
+
+  scanner.start(
+    { facingMode: "environment", advanced: [{ torch: true }] },
+    config,
+    onScanSuccess,
+    () => {}
+  ).then(() => {
+    document.getElementById("status").innerText =
+      "เล็งบาร์โค้ดแนวนอน | เอียงสินค้าเล็กน้อยถ้าซองเงา";
+  }).catch(err => {
+    document.getElementById("status").innerText =
+      "เปิดกล้องไม่สำเร็จ กรุณาพิมพ์รหัสแทน";
+  });
+}
+
+function onScanSuccess(decodedText) {
+  scanner.stop().then(() => sendToChat(decodedText));
+}
+
+function sendManual() {
+  const val = document.getElementById("manualInput").value.trim();
+  if (val) sendToChat(val);
+}
+
+function sendToChat(text) {
+  document.getElementById("status").innerText = "กำลังส่งข้อมูล...";
+  if (liff.isInClient()) {
+    liff.sendMessages([{ type: "text", text: text }])
+      .then(() => liff.closeWindow());
+  } else {
+    alert(text);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
